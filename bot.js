@@ -1,4 +1,5 @@
 const axios = require('axios');
+const FB_SECRET = process.env.FIREBASE_SECRET;
 
 const TMDB_API_KEY = '7ff77f551b7a1db3b68d9a5a991e7cd5';
 const FB_URL = 'https://sarko-43d61-default-rtdb.firebaseio.com';
