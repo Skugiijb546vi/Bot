@@ -1,0 +1,25 @@
+name: SEBAR TV Auto-Updater 🤖
+
+on:
+  schedule:
+    # ئەمە وادەکات هەموو ١٢ کاتژمێر جارێک خۆی ئیش بکات
+    - cron: '0 */12 * * *' 
+  workflow_dispatch: # ئەمە دوگمەیەکت پێ دەدات تا هەرکاتێک ویستت خۆت بە دەست ئیشی پێ بکەیت
+
+jobs:
+  update-database:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 هێنانی کۆدەکان
+        uses: actions/checkout@v3
+
+      - name: ⚙️ ئامادەکردنی ژینگەی Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: 📦 داگرتنی ئامرازەکان (Axios)
+        run: npm install
+
+      - name: 🚀 کارپێکردنی مەکینەی ڕاوکردنەکە
+        run: node bot.js
