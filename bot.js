@@ -1,5 +1,7 @@
 const axios = require('axios');
-const FB_SECRET = process.env.FIREBASE_SECRET;
+
+// هێنانی کلیلەکە لە گیتھەب ئەکشنزەوە
+const FB_SECRET = process.env.FIREBASE_SECRET; 
 
 const TMDB_API_KEY = '7ff77f551b7a1db3b68d9a5a991e7cd5';
 const FB_URL = 'https://sarko-43d61-default-rtdb.firebaseio.com';
@@ -25,11 +27,13 @@ async function translateToKurdish(text) {
 }
 
 // ---------------------------------------------------------
-// ٢. پشکنینی دووبارەبوونەوە
+// ٢. پشکنینی دووبارەبوونەوە (کلیلەکەی فایەربەیسی بۆ زیادکرا)
 // ---------------------------------------------------------
 async function checkExists(path, id) {
     try {
-        const res = await axios.get(`${FB_URL}/${path}/${id}.json?shallow=true`);
+        // بەکارهێنانی auth بۆ ئەوەی فایەربەیس ڕێگە بدات بیخوێنینەوە
+        const authParam = FB_SECRET ? `&auth=${FB_SECRET}` : "";
+        const res = await axios.get(`${FB_URL}/${path}/${id}.json?shallow=true${authParam}`);
         return res.data !== null; 
     } catch (e) {
         return false;
@@ -44,7 +48,6 @@ async function fetchAndSaveMovies() {
     
     for (let page = 1; page <= 3; page++) {
         try {
-            // لێرەدا زمانەکەمان کرد بە ئینگلیزی بۆ ئەوەی ناوەکان بە ئینگلیزی بێن
             const res = await axios.get(`https://api.themoviedb.org/3/movie/now_playing?api_key=${TMDB_API_KEY}&language=en-US&page=${page}`);
             const movies = res.data.results;
 
@@ -52,17 +55,13 @@ async function fetchAndSaveMovies() {
                 const exists = await checkExists('subtitled_movies1', tmdbMovie.id);
                 if (exists) continue;
 
-                // وەرگێڕانی وەسفەکە بۆ کوردی
                 const kurdishDesc = await translateToKurdish(tmdbMovie.overview);
-                // وەرگێڕانی ناوی فیلمەکە بۆ کوردی
                 const kurdishTitle = await translateToKurdish(tmdbMovie.title);
-                
-                // تێکەڵکردنی ناوەکان (ئینگلیزی - کوردی)
                 const finalTitle = `${tmdbMovie.title} - ${kurdishTitle}`;
 
                 const movieObj = {
                     badge_text: "FREE",
-                    description: kurdishDesc, // تەنها کوردییەکە دادەنێین بۆ وەسفەکە
+                    description: kurdishDesc, 
                     dubbedAudioUrl: "",
                     genre_id: tmdbMovie.genre_ids && tmdbMovie.genre_ids.length > 0 ? tmdbMovie.genre_ids[0] : 0,
                     hasKurdishSub: true,
@@ -72,14 +71,16 @@ async function fetchAndSaveMovies() {
                     introEndTime: 0,
                     isDubbed: false,
                     subtitleKurdish: "",
-                    title: finalTitle, // شێوازی ئینگلیزی - کوردی
+                    title: finalTitle, 
                     type: "movie",
                     url: "", 
                     views: 0,
                     year: tmdbMovie.release_date ? tmdbMovie.release_date.split('-')[0] : ""
                 };
 
-                await axios.put(`${FB_URL}/subtitled_movies1/${tmdbMovie.id}.json`, movieObj);
+                // ناردن بۆ فایەربەیس بە بەکارهێنانی کلیلە نهێنییەکە (auth)
+                const authParam = FB_SECRET ? `?auth=${FB_SECRET}` : "";
+                await axios.put(`${FB_URL}/subtitled_movies1/${tmdbMovie.id}.json${authParam}`, movieObj);
                 console.log(`✅ فیلمی نوێ خەزنکرا: ${movieObj.title}`);
             }
         } catch (error) {
@@ -106,11 +107,8 @@ async function fetchAndSaveSeries() {
                 const showDetailsRes = await axios.get(`https://api.themoviedb.org/3/tv/${tmdbShow.id}?api_key=${TMDB_API_KEY}&language=en-US`);
                 const showDetails = showDetailsRes.data;
 
-                // وەرگێڕانەکان
                 const kurdishDesc = await translateToKurdish(showDetails.overview);
                 const kurdishTitle = await translateToKurdish(showDetails.name);
-                
-                // تێکەڵکردنی ناوەکان (ئینگلیزی - کوردی)
                 const finalTitle = `${showDetails.name} - ${kurdishTitle}`;
 
                 let seasonsArray = [];
@@ -153,7 +151,9 @@ async function fetchAndSaveSeries() {
                     seasons: seasonsArray
                 };
 
-                await axios.put(`${FB_URL}/series1/${tmdbShow.id}.json`, seriesObj);
+                // ناردن بۆ فایەربەیس بە بەکارهێنانی کلیلە نهێنییەکە (auth)
+                const authParam = FB_SECRET ? `?auth=${FB_SECRET}` : "";
+                await axios.put(`${FB_URL}/series1/${tmdbShow.id}.json${authParam}`, seriesObj);
                 console.log(`✅ زنجیرەی نوێ خەزنکرا: ${seriesObj.title}`);
             }
         } catch (error) {
