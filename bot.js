@@ -3,7 +3,29 @@ const axios = require('axios');
 const TMDB_API_KEY = '7ff77f551b7a1db3b68d9a5a991e7cd5';
 const FB_URL = 'https://sarko-43d61-default-rtdb.firebaseio.com';
 
-// فەنکشنی پشکنینی دووبارەبوونەوە (بۆ ئەوەی ملیۆنێک فیلمەکە تێک نەچێت)
+// ---------------------------------------------------------
+// ١. مەکینەی وەرگێڕان بۆ کوردی (خۆڕایی و بێ کلیل)
+// ---------------------------------------------------------
+async function translateToKurdish(text) {
+    if (!text || text === "") return "زانیاری بەردەست نییە.";
+    try {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ckb&dt=t&q=${encodeURIComponent(text)}`;
+        const res = await axios.get(url);
+        let translated = "";
+        
+        res.data[0].forEach(part => {
+            translated += part[0];
+        });
+        return translated;
+    } catch (error) {
+        console.log("⚠️ کێشە لە وەرگێڕان.");
+        return text;
+    }
+}
+
+// ---------------------------------------------------------
+// ٢. پشکنینی دووبارەبوونەوە
+// ---------------------------------------------------------
 async function checkExists(path, id) {
     try {
         const res = await axios.get(`${FB_URL}/${path}/${id}.json?shallow=true`);
@@ -13,117 +35,135 @@ async function checkExists(path, id) {
     }
 }
 
-// مەکینەی هێنانی فیلمەکان
+// ---------------------------------------------------------
+// ٣. هێنانی فیلمە تازەکان
+// ---------------------------------------------------------
 async function fetchAndSaveMovies() {
-    console.log("🎬 دەستکردن بە هێنانی فیلمەکان بۆ subtitled_movies1...");
-    try {
-        const res = await axios.get(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ar&page=1`);
-        const movies = res.data.results;
+    console.log("🎬 دەستکردن بە هێنانی فیلمە تازەکان بۆ subtitled_movies1...");
+    
+    for (let page = 1; page <= 3; page++) {
+        try {
+            // لێرەدا زمانەکەمان کرد بە ئینگلیزی بۆ ئەوەی ناوەکان بە ئینگلیزی بێن
+            const res = await axios.get(`https://api.themoviedb.org/3/movie/now_playing?api_key=${TMDB_API_KEY}&language=en-US&page=${page}`);
+            const movies = res.data.results;
 
-        for (let tmdbMovie of movies) {
-            const exists = await checkExists('subtitled_movies1', tmdbMovie.id);
-            if (exists) {
-                console.log(`⚠️ فیلمی دووبارە تێپەڕێنرا: ${tmdbMovie.title}`);
-                continue;
+            for (let tmdbMovie of movies) {
+                const exists = await checkExists('subtitled_movies1', tmdbMovie.id);
+                if (exists) continue;
+
+                // وەرگێڕانی وەسفەکە بۆ کوردی
+                const kurdishDesc = await translateToKurdish(tmdbMovie.overview);
+                // وەرگێڕانی ناوی فیلمەکە بۆ کوردی
+                const kurdishTitle = await translateToKurdish(tmdbMovie.title);
+                
+                // تێکەڵکردنی ناوەکان (ئینگلیزی - کوردی)
+                const finalTitle = `${tmdbMovie.title} - ${kurdishTitle}`;
+
+                const movieObj = {
+                    badge_text: "FREE",
+                    description: kurdishDesc, // تەنها کوردییەکە دادەنێین بۆ وەسفەکە
+                    dubbedAudioUrl: "",
+                    genre_id: tmdbMovie.genre_ids && tmdbMovie.genre_ids.length > 0 ? tmdbMovie.genre_ids[0] : 0,
+                    hasKurdishSub: true,
+                    hasSubtitle: true,
+                    id: tmdbMovie.id,
+                    image: tmdbMovie.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbMovie.poster_path}` : "",
+                    introEndTime: 0,
+                    isDubbed: false,
+                    subtitleKurdish: "",
+                    title: finalTitle, // شێوازی ئینگلیزی - کوردی
+                    type: "movie",
+                    url: "", 
+                    views: 0,
+                    year: tmdbMovie.release_date ? tmdbMovie.release_date.split('-')[0] : ""
+                };
+
+                await axios.put(`${FB_URL}/subtitled_movies1/${tmdbMovie.id}.json`, movieObj);
+                console.log(`✅ فیلمی نوێ خەزنکرا: ${movieObj.title}`);
             }
-
-            // پەیکەری فیلم ڕێک وەک داواکارییەکەی خۆت
-            const movieObj = {
-                badge_text: "FREE",
-                description: tmdbMovie.overview || "زانیاری بەردەست نییە",
-                dubbedAudioUrl: "",
-                genre_id: tmdbMovie.genre_ids && tmdbMovie.genre_ids.length > 0 ? tmdbMovie.genre_ids[0] : 0,
-                hasKurdishSub: true,
-                hasSubtitle: true,
-                id: tmdbMovie.id,
-                image: tmdbMovie.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbMovie.poster_path}` : "",
-                introEndTime: 0,
-                isDubbed: false,
-                subtitleKurdish: "",
-                title: tmdbMovie.title,
-                type: "movie",
-                url: "", // لێرەدا دواتر لینکی پڕۆکسییەکەی خۆمانی تێ دەکەین
-                views: 0,
-                year: tmdbMovie.release_date ? tmdbMovie.release_date.split('-')[0] : ""
-            };
-
-            await axios.put(`${FB_URL}/subtitled_movies1/${tmdbMovie.id}.json`, movieObj);
-            console.log(`✅ فیلمی نوێ خەزنکرا: ${movieObj.title}`);
+        } catch (error) {
+            console.error(`❌ هەڵە لە پەڕەی ${page} ی فیلمەکان:`, error.message);
         }
-    } catch (error) {
-        console.error("❌ هەڵە لە فیلمەکان:", error.message);
     }
 }
 
-// مەکینەی هێنانی زنجیرەکان بە هەموو ئەڵقەکانییەوە
+// ---------------------------------------------------------
+// ٤. هێنانی زنجیرە تازەکان
+// ---------------------------------------------------------
 async function fetchAndSaveSeries() {
-    console.log("📺 دەستکردن بە هێنانی زنجیرەکان بۆ series1...");
-    try {
-        const res = await axios.get(`https://api.themoviedb.org/3/tv/popular?api_key=${TMDB_API_KEY}&language=ar&page=1`);
-        const seriesList = res.data.results;
+    console.log("📺 دەستکردن بە هێنانی زنجیرە تازەکان بۆ series1...");
+    
+    for (let page = 1; page <= 3; page++) {
+        try {
+            const res = await axios.get(`https://api.themoviedb.org/3/tv/on_the_air?api_key=${TMDB_API_KEY}&language=en-US&page=${page}`);
+            const seriesList = res.data.results;
 
-        for (let tmdbShow of seriesList) {
-            const exists = await checkExists('series1', tmdbShow.id);
-            if (exists) {
-                console.log(`⚠️ زنجیرەی دووبارە تێپەڕێنرا: ${tmdbShow.name}`);
-                continue;
-            }
+            for (let tmdbShow of seriesList) {
+                const exists = await checkExists('series1', tmdbShow.id);
+                if (exists) continue;
 
-            // هێنانی زانیاری تەواوەتی زنجیرەکە بۆ دۆزینەوەی وەرزەکان
-            const showDetailsRes = await axios.get(`https://api.api.themoviedb.org/3/tv/${tmdbShow.id}?api_key=${TMDB_API_KEY}&language=ar`);
-            const showDetails = showDetailsRes.data;
+                const showDetailsRes = await axios.get(`https://api.themoviedb.org/3/tv/${tmdbShow.id}?api_key=${TMDB_API_KEY}&language=en-US`);
+                const showDetails = showDetailsRes.data;
 
-            let seasonsArray = [];
+                // وەرگێڕانەکان
+                const kurdishDesc = await translateToKurdish(showDetails.overview);
+                const kurdishTitle = await translateToKurdish(showDetails.name);
+                
+                // تێکەڵکردنی ناوەکان (ئینگلیزی - کوردی)
+                const finalTitle = `${showDetails.name} - ${kurdishTitle}`;
 
-            // هێنانی ئەڵقەکانی هەر وەرزێک
-            for (let season of showDetails.seasons) {
-                if (season.season_number === 0) continue; // تێپەڕاندنی ئەڵقە تایبەتەکان (Specials)
+                let seasonsArray = [];
 
-                const seasonRes = await axios.get(`https://api.themoviedb.org/3/tv/${tmdbShow.id}/season/${season.season_number}?api_key=${TMDB_API_KEY}&language=ar`);
-                const seasonData = seasonRes.data;
+                for (let season of showDetails.seasons) {
+                    if (season.season_number === 0) continue; 
 
-                let episodesArray = [];
-                for (let episode of seasonData.episodes) {
-                    episodesArray.push({
-                        id: episode.episode_number,
-                        duration: episode.runtime ? `${episode.runtime}:00` : "45:00",
-                        image: episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : (tmdbShow.backdrop_path ? `https://image.tmdb.org/t/p/w500${tmdbShow.backdrop_path}` : ""),
-                        title: `ئەڵقەی ${episode.episode_number}`,
-                        url: ""
+                    const seasonRes = await axios.get(`https://api.themoviedb.org/3/tv/${tmdbShow.id}/season/${season.season_number}?api_key=${TMDB_API_KEY}&language=en-US`);
+                    const seasonData = seasonRes.data;
+
+                    let episodesArray = [];
+                    for (let episode of seasonData.episodes) {
+                        episodesArray.push({
+                            id: episode.episode_number,
+                            duration: episode.runtime ? `${episode.runtime}:00` : "45:00",
+                            image: episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : (showDetails.backdrop_path ? `https://image.tmdb.org/t/p/w500${showDetails.backdrop_path}` : ""),
+                            title: `ئەڵقەی ${episode.episode_number}`,
+                            url: ""
+                        });
+                    }
+
+                    seasonsArray.push({
+                        id: season.season_number,
+                        title: `وەرزی ${season.season_number}`,
+                        episodes: episodesArray
                     });
                 }
 
-                seasonsArray.push({
-                    id: season.season_number,
-                    title: `وەرزی ${season.season_number}`,
-                    episodes: episodesArray
-                });
+                const seriesObj = {
+                    badge_text: "نوێ",
+                    description: kurdishDesc,
+                    id: showDetails.id,
+                    image: showDetails.backdrop_path ? `https://image.tmdb.org/t/p/w780${showDetails.backdrop_path}` : "",
+                    imdb: showDetails.vote_average,
+                    poster: showDetails.poster_path ? `https://image.tmdb.org/t/p/w500${showDetails.poster_path}` : "",
+                    title: finalTitle,
+                    translation: "زنجیرە",
+                    type: "series",
+                    views: 0,
+                    seasons: seasonsArray
+                };
+
+                await axios.put(`${FB_URL}/series1/${tmdbShow.id}.json`, seriesObj);
+                console.log(`✅ زنجیرەی نوێ خەزنکرا: ${seriesObj.title}`);
             }
-
-            // پەیکەری زنجیرە ڕێک وەک داواکارییەکەی خۆت
-            const seriesObj = {
-                badge_text: "نوێ",
-                description: showDetails.overview || "زانیاری بەردەست نییە",
-                id: showDetails.id,
-                image: showDetails.backdrop_path ? `https://image.tmdb.org/t/p/w780${showDetails.backdrop_path}` : "",
-                imdb: showDetails.vote_average,
-                poster: showDetails.poster_path ? `https://image.tmdb.org/t/p/w500${showDetails.poster_path}` : "",
-                title: showDetails.name,
-                translation: "زنجیرە",
-                type: "series",
-                views: 0,
-                seasons: seasonsArray
-            };
-
-            await axios.put(`${FB_URL}/series1/${tmdbShow.id}.json`, seriesObj);
-            console.log(`✅ زنجیرەی نوێ خەزنکرا: ${seriesObj.title} (بە ${seasonsArray.length} وەرزەوە)`);
+        } catch (error) {
+            console.error(`❌ هەڵە لە زنجیرەکان پەڕەی ${page}:`, error.message);
         }
-    } catch (error) {
-        console.error("❌ هەڵە لە زنجیرەکان:", error.message);
     }
 }
 
-// کارپێکردنی هەردوو مەکینەکە
+// ---------------------------------------------------------
+// ٥. کارپێکردن
+// ---------------------------------------------------------
 async function runBot() {
     await fetchAndSaveMovies();
     console.log("-----------------------------------");
