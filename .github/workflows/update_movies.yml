@@ -2,9 +2,8 @@ name: SEBAR TV Auto-Updater 🤖
 
 on:
   schedule:
-    # ئەمە وادەکات هەموو ١٢ کاتژمێر جارێک خۆی ئیش بکات
     - cron: '0 */12 * * *' 
-  workflow_dispatch: # ئەمە دوگمەیەکت پێ دەدات تا هەرکاتێک ویستت خۆت بە دەست ئیشی پێ بکەیت
+  workflow_dispatch: 
 
 jobs:
   update-database:
@@ -18,8 +17,10 @@ jobs:
         with:
           node-version: '18'
 
-      - name: 📦 داگرتنی ئامرازەکان (Axios)
+      - name: 📦 داگرتنی ئامرازەکان
         run: npm install
 
       - name: 🚀 کارپێکردنی مەکینەی ڕاوکردنەکە
+        env:
+          FIREBASE_SECRET: ${{ secrets.FIREBASE_SECRET }} # لێرەدا کلیلەکە دەدەین بە بۆتەکە
         run: node bot.js
